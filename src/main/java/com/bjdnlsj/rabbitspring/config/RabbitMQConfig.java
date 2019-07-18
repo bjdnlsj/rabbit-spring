@@ -96,13 +96,20 @@ public class RabbitMQConfig {
 	@Bean
 	public SimpleMessageListenerContainer messageListenerContainer(ConnectionFactory connectionFactory){
 
+		// 创建一个消息容器对象
 		SimpleMessageListenerContainer container = new SimpleMessageListenerContainer(connectionFactory);
+		// 设置实际的队列
 		container.setQueues(queue001(),queue002(),queue003(),queue_image(),queue_pdf());
+		//设置消费者数量
 		container.setConcurrentConsumers(1);
+		//设置最大的消费者数量
 		container.setMaxConcurrentConsumers(5);
+		// 是否重回队列
 		container.setDefaultRequeueRejected(false);
+		// 牵收模式
 		container.setAcknowledgeMode(AcknowledgeMode.AUTO);
-		//container.setExposeListenerChannel(true);
+		container.setExposeListenerChannel(true);
+
 		container.setConsumerTagStrategy(new ConsumerTagStrategy() {
 			@Override
 			public String createConsumerTag(String s) {
@@ -113,7 +120,7 @@ public class RabbitMQConfig {
 			@Override
 			public void onMessage(Message message, Channel channel) throws Exception {
 				String msg = String.valueOf(message.getBody());
-				System.err.println(msg);
+				System.err.println("---------------------消费者："+msg);
 			}
 		});
 		return  container;
