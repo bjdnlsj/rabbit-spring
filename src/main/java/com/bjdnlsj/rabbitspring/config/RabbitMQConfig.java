@@ -1,15 +1,20 @@
 package com.bjdnlsj.rabbitspring.config;
 
 
-import com.rabbitmq.client.Channel;
+import com.bjdnlsj.rabbitspring.adapter.MessageDelegate;
+import com.bjdnlsj.rabbitspring.convert.ImageMessageConverter;
+import com.bjdnlsj.rabbitspring.convert.PDFMessageConverter;
+import com.bjdnlsj.rabbitspring.convert.TextMessageConverter;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
-import org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener;
+import org.springframework.amqp.rabbit.listener.adapter.MessageListenerAdapter;
 import org.springframework.amqp.support.ConsumerTagStrategy;
+import org.springframework.amqp.support.converter.ContentTypeDelegatingMessageConverter;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
@@ -116,13 +121,95 @@ public class RabbitMQConfig {
 				return s+"_"+ UUID.randomUUID().toString();
 			}
 		});
-		container.setMessageListener(new ChannelAwareMessageListener() {
-			@Override
-			public void onMessage(Message message, Channel channel) throws Exception {
-				String msg = String.valueOf(message.getBody());
-				System.err.println("---------------------消费者："+msg);
-			}
-		});
+		// 1. 监听的方式
+		//container.setMessageListener(new ChannelAwareMessageListener() {
+		//	@Override
+		//	public void onMessage(Message message, Channel channel) throws Exception {
+		//		String msg = new String(message.getBody());
+		//		System.err.println("---------------------消费者："+msg);
+		//	}
+		//});
+		// 2. 适配的方式（推荐） 适配器方式：我们的队列名称 和 方法名称 也可以进行一对一的匹配
+		//MessageListenerAdapter adapter = new MessageListenerAdapter(new MessageDelegate());
+		//adapter.setMessageConverter(new TextMessageConverter());
+		//Map<String, String> queueOrTagToMethodName = new HashMap<>();
+		//queueOrTagToMethodName.put("queue001", "method1");
+		//queueOrTagToMethodName.put("queue002", "method2");
+		//adapter.setQueueOrTagToMethodName(queueOrTagToMethodName);
+		//container.setMessageListener(adapter);
+
+		// 1.1 支持json格式的转换器
+		// MessageListenerAdapter adapter = new MessageListenerAdapter(new MessageDelegate());
+		// adapter.setDefaultListenerMethod("consumeMessage");
+		// Jackson2JsonMessageConverter jackson2JsonMessageConverter = new Jackson2JsonMessageConverter();
+		// adapter.setMessageConverter(jackson2JsonMessageConverter);
+		//
+		// container.setMessageListener(adapter);
+
+		//// 1.2 DefaultJackson2JavaTypeMapper & Jackson2JsonMessageConverter 支持java对象转换 TODO 测试失败
+		//MessageListenerAdapter adapter = new MessageListenerAdapter(new MessageDelegate());
+		//adapter.setDefaultListenerMethod("consumeMessage");
+		//
+		//Jackson2JsonMessageConverter jackson2JsonMessageConverter = new Jackson2JsonMessageConverter();
+		//DefaultJackson2JavaTypeMapper javaTypeMapper = new DefaultJackson2JavaTypeMapper();
+		//
+		//
+		// Map<String, Class<?>> idClassMapping = new HashMap<String, Class<?>>();
+		// idClassMapping.put("order", com.bjdnlsj.rabbitspring.entity.Order.class);
+		// //idClassMapping.put("packaged", com.bjdnlsj.rabbitspring.entity.Packaged.class);
+		//javaTypeMapper.setIdClassMapping(idClassMapping);
+		//
+		//jackson2JsonMessageConverter.setJavaTypeMapper(javaTypeMapper);
+		//adapter.setMessageConverter(jackson2JsonMessageConverter);
+		//container.setMessageListener(adapter);
+
+
+
+		//1.3 DefaultJackson2JavaTypeMapper & Jackson2JsonMessageConverter 支持java对象多映射转换
+		// MessageListenerAdapter adapter = new MessageListenerAdapter(new MessageDelegate());
+		// adapter.setDefaultListenerMethod("consumeMessage");
+		// Jackson2JsonMessageConverter jackson2JsonMessageConverter = new Jackson2JsonMessageConverter();
+		// DefaultJackson2JavaTypeMapper javaTypeMapper = new DefaultJackson2JavaTypeMapper();
+		//
+		// Map<String, Class<?>> idClassMapping = new HashMap<String, Class<?>>();
+		// idClassMapping.put("order", com.bjdnlsj.rabbitspring.entity.Order.class);
+		// idClassMapping.put("packaged", com.bjdnlsj.rabbitspring.entity.Packaged.class);
+		//
+		// javaTypeMapper.setIdClassMapping(idClassMapping);
+		//
+		// jackson2JsonMessageConverter.setJavaTypeMapper(javaTypeMapper);
+		// adapter.setMessageConverter(jackson2JsonMessageConverter);
+		// container.setMessageListener(adapter);
+
+
+		////1.4 ext convert
+
+		MessageListenerAdapter adapter = new MessageListenerAdapter(new MessageDelegate());
+		adapter.setDefaultListenerMethod("consumeMessage");
+
+		//全局的转换器:
+		ContentTypeDelegatingMessageConverter convert = new ContentTypeDelegatingMessageConverter();
+
+		TextMessageConverter textConvert = new TextMessageConverter();
+		convert.addDelegate("text", textConvert);
+		convert.addDelegate("html/text", textConvert);
+		convert.addDelegate("xml/text", textConvert);
+		convert.addDelegate("text/plain", textConvert);
+
+		Jackson2JsonMessageConverter jsonConvert = new Jackson2JsonMessageConverter();
+		convert.addDelegate("json", jsonConvert);
+		convert.addDelegate("application/json", jsonConvert);
+
+		ImageMessageConverter imageConverter = new ImageMessageConverter();
+		convert.addDelegate("image/png", imageConverter);
+		convert.addDelegate("image", imageConverter);
+
+		PDFMessageConverter pdfConverter = new PDFMessageConverter();
+		convert.addDelegate("application/pdf", pdfConverter);
+
+
+		adapter.setMessageConverter(convert);
+		container.setMessageListener(adapter);
 		return  container;
 	}
 
